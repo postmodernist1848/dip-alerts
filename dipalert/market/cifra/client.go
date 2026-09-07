@@ -27,7 +27,7 @@ func New(baseURL, key, secret string, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 8 * time.Second}
 	}
-	return &Client{BaseURL: strings.TrimRight(baseURL, "/"), APIKey: key, APISecret: secret, Ticker: "USDT-RUB", HTTPClient: httpClient, Now: time.Now}
+	return &Client{BaseURL: strings.TrimRight(baseURL, "/"), APIKey: key, APISecret: secret, Ticker: "USDT-RUB.IMEX", HTTPClient: httpClient, Now: time.Now}
 }
 
 func (c *Client) Snapshot(ctx context.Context, since, now time.Time) (market.Snapshot, error) {
