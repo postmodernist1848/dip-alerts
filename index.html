@@ -51,7 +51,11 @@
       const progress = next === undefined ? 100 : Math.min(100, Math.abs(dd / next) * 100);
       const distance = next === undefined ? 'All targets crossed' : `${Math.abs(dd-next).toFixed(2)} pp to ${next}%`;
       const highTime = result.highAt ? new Date(result.highAt).toLocaleString() : 'unknown time';
-      return `<article><div class="top"><div><strong>${esc(m.title)}</strong><div class="muted">${esc(m.source)}</div></div><span class="muted">from ${esc(m.window)}</span></div><div class="value">${pct(result.drawdown)}</div><div class="muted">${distance}</div><div class="prices"><div class="price"><span>Current best ask</span>${price(result.currentPrice,result.market)} ${esc(m.currency)}</div><div class="price"><span>Rolling high</span>${price(result.rollingHigh,result.market)} ${esc(m.currency)}</div></div><div class="muted">High recorded ${esc(highTime)}</div><div class="bar"><div class="fill" style="width:${progress}%"></div></div><div class="targets">${m.targets.map(x=>`<span class="target">Target ${x}%</span>`).join('')}</div></article>`;
+      const targets = m.targets.map(x => {
+        const targetPrice = result.rollingHigh * (1 + x / 100);
+        return `<span class="target">Target ${x}% · ${price(targetPrice,result.market)} ${esc(m.currency)}</span>`;
+      }).join('');
+      return `<article><div class="top"><div><strong>${esc(m.title)}</strong><div class="muted">${esc(m.source)}</div></div><span class="muted">from ${esc(m.window)}</span></div><div class="value">${pct(result.drawdown)}</div><div class="muted">${distance}</div><div class="prices"><div class="price"><span>Current best ask</span>${price(result.currentPrice,result.market)} ${esc(m.currency)}</div><div class="price"><span>Rolling high</span>${price(result.rollingHigh,result.market)} ${esc(m.currency)}</div></div><div class="muted">High recorded ${esc(highTime)}</div><div class="bar"><div class="fill" style="width:${progress}%"></div></div><div class="targets">${targets}</div></article>`;
     }
     function renderService(last) {
       if (!last) {
