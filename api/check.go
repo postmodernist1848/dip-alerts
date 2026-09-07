@@ -7,11 +7,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/postmodernist1848/dip-alert/dipalert/alert"
-	"github.com/postmodernist1848/dip-alert/dipalert/app"
-	"github.com/postmodernist1848/dip-alert/dipalert/config"
-	"github.com/postmodernist1848/dip-alert/dipalert/state/upstash"
-	"github.com/postmodernist1848/dip-alert/dipalert/telegram"
+	"github.com/postmodernist1848/dip-alerts/dipalert/alert"
+	"github.com/postmodernist1848/dip-alerts/dipalert/app"
+	"github.com/postmodernist1848/dip-alerts/dipalert/config"
+	"github.com/postmodernist1848/dip-alerts/dipalert/state/upstash"
+	"github.com/postmodernist1848/dip-alerts/dipalert/telegram"
 )
 
 var runtime struct {

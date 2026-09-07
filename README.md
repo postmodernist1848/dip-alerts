@@ -1,4 +1,4 @@
-# dip-alert
+# dip-alerts
 
 Outbound-only Telegram alerts for DCA dip opportunities:
 
