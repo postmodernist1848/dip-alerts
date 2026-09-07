@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/postmodernist1848/dip-alert/internal/state"
+	"github.com/postmodernist1848/dip-alert/dipalert/state"
 )
 
 type Store struct {

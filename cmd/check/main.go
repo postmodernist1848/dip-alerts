@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/postmodernist1848/dip-alert/internal/app"
-	"github.com/postmodernist1848/dip-alert/internal/config"
-	"github.com/postmodernist1848/dip-alert/internal/state"
+	"github.com/postmodernist1848/dip-alert/dipalert/app"
+	"github.com/postmodernist1848/dip-alert/dipalert/config"
+	"github.com/postmodernist1848/dip-alert/dipalert/state"
 )
 
 func main() {

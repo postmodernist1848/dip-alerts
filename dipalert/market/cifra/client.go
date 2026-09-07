@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/postmodernist1848/dip-alert/internal/market"
+	"github.com/postmodernist1848/dip-alert/dipalert/market"
 )
 
 type Client struct {
