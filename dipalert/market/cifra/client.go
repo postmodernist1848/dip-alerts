@@ -32,7 +32,7 @@ func New(baseURL, key, secret string, httpClient *http.Client) *Client {
 }
 
 func (c *Client) Snapshot(ctx context.Context, since, now time.Time) (market.Snapshot, error) {
-	quoteRaw, err := c.signed(ctx, "getStockQuotesJson", url.Values{"tickers": {c.Ticker}})
+	quoteRaw, err := c.signed(ctx, "getStockQuotesJson", url.Values{"tickers[0]": {c.Ticker}})
 	if err != nil {
 		return market.Snapshot{}, fmt.Errorf("Cifra quote: %w", err)
 	}

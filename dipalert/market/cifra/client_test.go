@@ -34,7 +34,7 @@ func TestSignedRequest(t *testing.T) {
 	})}
 	c := New("https://example.invalid", "public", "secret", httpClient)
 	c.Now = func() time.Time { return time.UnixMilli(123456) }
-	if _, err := c.signed(t.Context(), "getStockQuotesJson", url.Values{"tickers": {"USDT-RUB"}}); err != nil {
+	if _, err := c.signed(t.Context(), "getStockQuotesJson", url.Values{"tickers[0]": {"USDT-RUB"}}); err != nil {
 		t.Fatal(err)
 	}
 	mac := hmac.New(sha256.New, []byte("secret"))
@@ -43,6 +43,9 @@ func TestSignedRequest(t *testing.T) {
 		t.Fatalf("signature mismatch")
 	}
 	if !strings.HasSuffix(gotForm.Get("nonce"), "0") || gotForm.Get("apiKey") != "public" {
+		t.Fatalf("form=%v", gotForm)
+	}
+	if gotForm.Get("tickers[0]") != "USDT-RUB" {
 		t.Fatalf("form=%v", gotForm)
 	}
 }
