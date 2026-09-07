@@ -40,7 +40,7 @@ func (c *Client) Snapshot(ctx context.Context, since, now time.Time) (market.Sna
 	if err != nil {
 		return market.Snapshot{}, fmt.Errorf("Cifra quote: %w", err)
 	}
-	candleRaw, err := c.signed(ctx, "getHloc", url.Values{
+	candleRaw, err := c.public(ctx, "get-hloc", url.Values{
 		"id":           {c.Ticker},
 		"count":        {"-1"},
 		"timeframe":    {"60"},
@@ -56,6 +56,15 @@ func (c *Client) Snapshot(ctx context.Context, since, now time.Time) (market.Sna
 		return market.Snapshot{}, fmt.Errorf("Cifra candles: %w", err)
 	}
 	return market.Snapshot{Market: c.Ticker, Source: "Cifra Markets", Currency: "RUB", BestAsk: ask, QuoteTime: quoteTime, Candles: candles}, nil
+}
+
+func (c *Client) public(ctx context.Context, path string, values url.Values) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/"+path, strings.NewReader(values.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return c.do(req)
 }
 
 func (c *Client) signed(ctx context.Context, command string, values url.Values) ([]byte, error) {
@@ -84,7 +93,18 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 		return nil, err
 	}
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		message := strings.TrimSpace(string(raw))
+		contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+		if strings.Contains(contentType, "text/html") || strings.Contains(strings.ToLower(message), "cloudflare") {
+			if strings.Contains(strings.ToLower(message), "cloudflare") {
+				return nil, fmt.Errorf("HTTP %d (Cloudflare block)", resp.StatusCode)
+			}
+			return nil, fmt.Errorf("HTTP %d (HTML response)", resp.StatusCode)
+		}
+		if len(message) > 300 {
+			message = message[:300] + "…"
+		}
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, message)
 	}
 	return raw, nil
 }

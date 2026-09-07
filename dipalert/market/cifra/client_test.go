@@ -47,6 +47,43 @@ func TestSignedRequest(t *testing.T) {
 	}
 }
 
+func TestPublicHlocRequest(t *testing.T) {
+	var gotPath, gotContentType string
+	var gotForm url.Values
+	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(r.Body)
+		gotPath = r.URL.Path
+		gotContentType = r.Header.Get("Content-Type")
+		gotForm, _ = url.ParseQuery(string(body))
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
+	})}
+	c := New("https://example.invalid/api", "public", "secret", httpClient)
+	if _, err := c.public(t.Context(), "get-hloc", url.Values{"id": {"USDT-RUB"}, "timeframe": {"60"}}); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/get-hloc" || gotContentType != "application/x-www-form-urlencoded" {
+		t.Fatalf("path=%q content-type=%q", gotPath, gotContentType)
+	}
+	if gotForm.Get("id") != "USDT-RUB" || gotForm.Get("timeframe") != "60" {
+		t.Fatalf("form=%v", gotForm)
+	}
+}
+
+func TestCloudflareErrorIsSanitized(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 403,
+			Body:       io.NopCloser(strings.NewReader(`<html>blocked by Cloudflare and a very long page</html>`)),
+			Header:     http.Header{"Content-Type": {"text/html"}},
+		}, nil
+	})}
+	c := New("https://example.invalid/api", "public", "secret", httpClient)
+	_, err := c.public(t.Context(), "get-hloc", nil)
+	if err == nil || err.Error() != "HTTP 403 (Cloudflare block)" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

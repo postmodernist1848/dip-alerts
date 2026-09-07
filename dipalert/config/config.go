@@ -29,7 +29,7 @@ func Load() (Config, error) {
 		RedisToken:      strings.TrimSpace(os.Getenv("KV_REST_API_TOKEN")),
 	}
 	if c.CifraAPIBase == "" {
-		c.CifraAPIBase = "https://tradernet.com/api"
+		c.CifraAPIBase = "https://tradernet.by/api"
 	}
 	if c.TelegramToken == "" || c.TelegramChatID == "" || c.SchedulerSecret == "" ||
 		c.CifraAPIKey == "" || c.CifraAPISecret == "" || c.RedisURL == "" || c.RedisToken == "" {
