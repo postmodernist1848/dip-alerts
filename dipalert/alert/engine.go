@@ -26,10 +26,13 @@ type Watch struct {
 	Schedule Schedule
 }
 type Result struct {
-	Market   string   `json:"market"`
-	Drawdown float64  `json:"drawdown,omitempty"`
-	Alerted  []string `json:"alerted,omitempty"`
-	Error    string   `json:"error,omitempty"`
+	Market       string     `json:"market"`
+	CurrentPrice float64    `json:"currentPrice,omitempty"`
+	RollingHigh  float64    `json:"rollingHigh,omitempty"`
+	HighAt       *time.Time `json:"highAt,omitempty"`
+	Drawdown     float64    `json:"drawdown,omitempty"`
+	Alerted      []string   `json:"alerted,omitempty"`
+	Error        string     `json:"error,omitempty"`
 }
 type Engine struct {
 	Store   state.Store
@@ -87,6 +90,9 @@ func (e *Engine) runWatch(ctx context.Context, watch Watch, now time.Time, deliv
 		return result, err
 	}
 	drawdown := snapshot.BestAsk/high - 1
+	result.CurrentPrice = snapshot.BestAsk
+	result.RollingHigh = high
+	result.HighAt = &highAt
 	result.Drawdown = drawdown
 	cycle, next := watch.Schedule(now)
 	if stored.Cycle != cycle {
