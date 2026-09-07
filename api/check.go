@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/postmodernist1848/dip-alerts/dipalert/alert"
 	"github.com/postmodernist1848/dip-alerts/dipalert/app"
@@ -17,6 +18,7 @@ import (
 var runtime struct {
 	sync.Once
 	engine *alert.Engine
+	store  *upstash.Store
 	secret string
 	err    error
 }
@@ -37,8 +39,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	results, err := runtime.engine.Run(r.Context(), true)
+	checkedAt := time.Now().UTC()
+	_ = runtime.store.SaveLastCheck(r.Context(), map[string]any{
+		"checkedAt": checkedAt.Format(time.RFC3339),
+		"ok":        err == nil,
+		"results":   results,
+	})
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"results": results, "ok": err == nil})
+	_ = json.NewEncoder(w).Encode(map[string]any{"checkedAt": checkedAt.Format(time.RFC3339), "results": results, "ok": err == nil})
 }
 
 func initialize() {
@@ -50,6 +58,7 @@ func initialize() {
 		}
 		runtime.secret = c.SchedulerSecret
 		store := upstash.New(c.RedisURL, c.RedisToken, nil)
+		runtime.store = store
 		sender := telegram.New(c.TelegramToken, c.TelegramChatID, nil)
 		runtime.engine = app.Engine(c, store, sender, nil)
 	})

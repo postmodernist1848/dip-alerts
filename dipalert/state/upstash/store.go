@@ -56,6 +56,33 @@ func (s *Store) Save(ctx context.Context, marketName string, value state.MarketS
 	return err
 }
 
+func (s *Store) SaveLastCheck(ctx context.Context, value any) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = s.command(ctx, "SET", "dip-alert:v1:last-check", string(raw))
+	return err
+}
+
+func (s *Store) LoadLastCheck(ctx context.Context) (json.RawMessage, error) {
+	result, err := s.command(ctx, "GET", "dip-alert:v1:last-check")
+	if err != nil {
+		return nil, err
+	}
+	if len(result) == 0 || bytes.Equal(result, []byte("null")) {
+		return nil, nil
+	}
+	var encoded string
+	if err := json.Unmarshal(result, &encoded); err != nil {
+		return nil, fmt.Errorf("decode Redis value: %w", err)
+	}
+	if !json.Valid([]byte(encoded)) {
+		return nil, fmt.Errorf("decode last check: invalid JSON")
+	}
+	return json.RawMessage(encoded), nil
+}
+
 func (s *Store) command(ctx context.Context, args ...string) (json.RawMessage, error) {
 	body, _ := json.Marshal(args)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.url, bytes.NewReader(body))

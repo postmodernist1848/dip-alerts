@@ -13,6 +13,9 @@
     button:disabled { opacity:.5; cursor:wait }
     .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px }
     article { padding:22px; border:1px solid #252b36; border-radius:16px; background:#12161e }
+    .service { margin-bottom:16px; display:flex; justify-content:space-between; gap:18px; align-items:center }
+    .service strong { font-size:18px }
+    .healthy { color:#4ed6a5 }.unhealthy { color:#ff8b8b }.unknown { color:#f0bd66 }
     .top { display:flex; justify-content:space-between; gap:16px; align-items:center }
     .value { font-size:42px; font-weight:750; letter-spacing:-1px; margin:20px 0 6px }
     .bar { height:8px; background:#272e3a; border-radius:99px; overflow:hidden; margin:18px 0 }
@@ -25,6 +28,7 @@
 </head>
 <body>
   <header><div><h1>Dip alerts</h1><small id="stamp">Loading live market data…</small></div><button id="refresh">Refresh</button></header>
+  <section id="service"></section>
   <main class="grid" id="cards"></main>
   <footer>Read-only view. Refreshing reads Cifra Markets and Hyperliquid; it does not send alerts or write state.</footer>
   <script>
@@ -32,7 +36,7 @@
       'usdt-rub': { title:'USDT / RUB', source:'Cifra Markets · USDT-RUB.IMEX', targets:[-3,-5], window:'14-day high' },
       'btc-usdc': { title:'BTC / USDC', source:'Hyperliquid spot', targets:[-5,-10], window:'7-day high' }
     };
-    const cards = document.querySelector('#cards'), stamp = document.querySelector('#stamp'), button = document.querySelector('#refresh');
+    const cards = document.querySelector('#cards'), service = document.querySelector('#service'), stamp = document.querySelector('#stamp'), button = document.querySelector('#refresh');
     const pct = value => `${(value * 100).toFixed(2)}%`;
     const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     function card(result) {
@@ -44,15 +48,28 @@
       const distance = next === undefined ? 'All targets crossed' : `${Math.abs(dd-next).toFixed(2)} pp to ${next}%`;
       return `<article><div class="top"><div><strong>${esc(m.title)}</strong><div class="muted">${esc(m.source)}</div></div><span class="muted">from ${esc(m.window)}</span></div><div class="value">${pct(result.drawdown)}</div><div class="muted">${distance}</div><div class="bar"><div class="fill" style="width:${progress}%"></div></div><div class="targets">${m.targets.map(x=>`<span class="target">Target ${x}%</span>`).join('')}</div></article>`;
     }
+    function renderService(last) {
+      if (!last) {
+        service.innerHTML = `<article class="service"><div><strong class="unknown">Waiting for cron</strong><div class="muted">No completed /api/check run has been recorded yet.</div></div></article>`;
+        return;
+      }
+      const at = new Date(last.checkedAt), ageSeconds = Math.max(0, Math.floor((Date.now()-at.getTime())/1000));
+      const age = ageSeconds < 90 ? `${ageSeconds}s ago` : ageSeconds < 5400 ? `${Math.floor(ageSeconds/60)}m ago` : `${Math.floor(ageSeconds/3600)}h ago`;
+      const failures = (last.results || []).filter(x => x.error).map(x => markets[x.market]?.title || x.market);
+      const label = last.ok ? 'Cron check healthy' : 'Cron check completed with errors';
+      const detail = failures.length ? `Unavailable: ${failures.join(', ')}` : 'Cifra Markets and Hyperliquid completed successfully.';
+      service.innerHTML = `<article class="service"><div><strong class="${last.ok?'healthy':'unhealthy'}">${label}</strong><div class="muted">${esc(detail)}</div></div><div class="muted">${esc(at.toLocaleString())}<br>${age}</div></article>`;
+    }
     async function load() {
       button.disabled = true; stamp.textContent = 'Loading live market data…';
       try {
         const response = await fetch('/api/status', {cache:'no-store'});
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
+        renderService(data.lastCheck);
         cards.innerHTML = data.results.map(card).join('');
         stamp.textContent = `Checked ${new Date(data.checkedAt).toLocaleString()} · ${data.ok ? 'all sources healthy' : 'some sources unavailable'}`;
-      } catch (error) { cards.innerHTML = `<article><p class="error">Could not load status: ${esc(error.message)}</p></article>`; stamp.textContent = 'Status unavailable'; }
+      } catch (error) { service.innerHTML = ''; cards.innerHTML = `<article><p class="error">Could not load status: ${esc(error.message)}</p></article>`; stamp.textContent = 'Status unavailable'; }
       finally { button.disabled = false; }
     }
     button.addEventListener('click', load); load();
