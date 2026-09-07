@@ -106,6 +106,17 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, message)
 	}
+	var envelope struct {
+		Code   *int   `json:"code"`
+		ErrMsg string `json:"errMsg"`
+	}
+	if json.Unmarshal(raw, &envelope) == nil && envelope.Code != nil && *envelope.Code != 0 {
+		message := strings.TrimSpace(envelope.ErrMsg)
+		if message == "" {
+			message = "unspecified API error"
+		}
+		return nil, fmt.Errorf("API code %d: %s", *envelope.Code, message)
+	}
 	return raw, nil
 }
 

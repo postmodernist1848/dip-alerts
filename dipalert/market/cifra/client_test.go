@@ -84,6 +84,21 @@ func TestCloudflareErrorIsSanitized(t *testing.T) {
 	}
 }
 
+func TestAPIErrorIsReported(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(strings.NewReader(`{"code":4,"errMsg":"Bad signature"}`)),
+			Header:     http.Header{"Content-Type": {"application/json"}},
+		}, nil
+	})}
+	c := New("https://example.invalid/api", "public", "secret", httpClient)
+	_, err := c.public(t.Context(), "get-hloc", nil)
+	if err == nil || err.Error() != "API code 4: Bad signature" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
