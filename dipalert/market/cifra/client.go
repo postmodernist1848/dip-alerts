@@ -40,11 +40,12 @@ func (c *Client) Snapshot(ctx context.Context, since, now time.Time) (market.Sna
 		return market.Snapshot{}, fmt.Errorf("Cifra quote: %w", err)
 	}
 	candleRaw, err := c.signed(ctx, "getHloc", map[string]any{
-		"id":        c.Ticker,
-		"count":     -1,
-		"timeStart": since.Unix(),
-		"timeEnd":   now.Unix(),
-		"timeframe": 3600,
+		"id":           c.Ticker,
+		"count":        -1,
+		"date_from":    since.UTC().Format("02.01.2006 15:04"),
+		"date_to":      now.UTC().Format("02.01.2006 15:04"),
+		"timeframe":    60,
+		"intervalMode": "ClosedRay",
 	})
 	if err != nil {
 		return market.Snapshot{}, fmt.Errorf("Cifra candles: %w", err)
