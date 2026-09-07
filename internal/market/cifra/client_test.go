@@ -1,0 +1,52 @@
+package cifra
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestParsers(t *testing.T) {
+	ask, at, err := parseQuote([]byte(`{"q":[{"c":"USDT-RUB","bap":"86.75","ltt":"2026-09-07T10:00:00Z"}]}`), time.Time{})
+	if err != nil || ask != 86.75 || at.Hour() != 10 {
+		t.Fatalf("quote ask=%v at=%v err=%v", ask, at, err)
+	}
+	candles, err := parseCandles([]byte(`{"hloc":{"USDT-RUB":[[90,85,89,88],[89,84,88,86]]},"xSeries":{"USDT-RUB":[1788768000,1788771600]}}`))
+	if err != nil || len(candles) != 2 || candles[1].Close != 86 {
+		t.Fatalf("candles=%v err=%v", candles, err)
+	}
+}
+
+func TestSignedRequest(t *testing.T) {
+	var gotForm url.Values
+	var gotSignature string
+	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(r.Body)
+		gotForm, _ = url.ParseQuery(string(body))
+		gotSignature = r.Header.Get("X-NtApi-Sig")
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
+	})}
+	c := New("https://example.invalid", "public", "secret", httpClient)
+	c.Now = func() time.Time { return time.UnixMilli(123456) }
+	if _, err := c.signed(t.Context(), "getStockQuotesJson", url.Values{"tickers": {"USDT-RUB"}}); err != nil {
+		t.Fatal(err)
+	}
+	mac := hmac.New(sha256.New, []byte("secret"))
+	mac.Write([]byte(gotForm.Encode()))
+	if gotSignature != hex.EncodeToString(mac.Sum(nil)) {
+		t.Fatalf("signature mismatch")
+	}
+	if !strings.HasSuffix(gotForm.Get("nonce"), "0") || gotForm.Get("apiKey") != "public" {
+		t.Fatalf("form=%v", gotForm)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
