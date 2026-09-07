@@ -26,7 +26,7 @@ This calls both data providers and prints calculations. It does not access Redis
 5. Deploy with `vercel --prod`.
 6. In cron-job.org, create a five-minute GET job for `https://<deployment>/api/check` with header `Authorization: Bearer <SCHEDULER_SECRET>`. Enable failure notifications.
 
-The endpoint returns HTTP 502 if either provider fails, while still processing the healthy provider. There are no alternate data sources and no trading endpoints.
+The endpoint returns HTTP 200 after an authenticated run even if one provider fails, reports that provider as an error in the JSON response, and still processes the healthy provider. There are no alternate data sources and no trading endpoints.
 
 ## Development
 

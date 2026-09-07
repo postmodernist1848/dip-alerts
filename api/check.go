@@ -38,9 +38,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	results, err := runtime.engine.Run(r.Context(), true)
 	w.Header().Set("Content-Type", "application/json")
-	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"results": results, "ok": err == nil})
 }
 
