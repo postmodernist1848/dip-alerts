@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -24,51 +23,32 @@ func TestParsers(t *testing.T) {
 }
 
 func TestSignedRequest(t *testing.T) {
-	var gotForm url.Values
-	var gotSignature string
+	var gotBody, gotSignature, gotPublicKey, gotTimestamp, gotContentType, gotPath string
 	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		body, _ := io.ReadAll(r.Body)
-		gotForm, _ = url.ParseQuery(string(body))
+		gotBody = string(body)
 		gotSignature = r.Header.Get("X-NtApi-Sig")
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
-	})}
-	c := New("https://example.invalid", "public", "secret", httpClient)
-	c.Now = func() time.Time { return time.UnixMilli(123456) }
-	if _, err := c.signed(t.Context(), "getStockQuotesJson", url.Values{"tickers[0]": {"USDT-RUB"}}); err != nil {
-		t.Fatal(err)
-	}
-	mac := hmac.New(sha256.New, []byte("secret"))
-	mac.Write([]byte(gotForm.Encode()))
-	if gotSignature != hex.EncodeToString(mac.Sum(nil)) {
-		t.Fatalf("signature mismatch")
-	}
-	if !strings.HasSuffix(gotForm.Get("nonce"), "0") || gotForm.Get("apiKey") != "public" {
-		t.Fatalf("form=%v", gotForm)
-	}
-	if gotForm.Get("tickers[0]") != "USDT-RUB" {
-		t.Fatalf("form=%v", gotForm)
-	}
-}
-
-func TestPublicHlocRequest(t *testing.T) {
-	var gotPath, gotContentType string
-	var gotForm url.Values
-	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		body, _ := io.ReadAll(r.Body)
-		gotPath = r.URL.Path
+		gotPublicKey = r.Header.Get("X-NtApi-PublicKey")
+		gotTimestamp = r.Header.Get("X-NtApi-Timestamp")
 		gotContentType = r.Header.Get("Content-Type")
-		gotForm, _ = url.ParseQuery(string(body))
+		gotPath = r.URL.Path
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
 	})}
 	c := New("https://example.invalid/api", "public", "secret", httpClient)
-	if _, err := c.public(t.Context(), "get-hloc", url.Values{"id": {"USDT-RUB"}, "timeframe": {"60"}}); err != nil {
+	c.Now = func() time.Time { return time.Unix(123456, 0) }
+	if _, err := c.signed(t.Context(), "getStockQuotesJson", map[string]any{"tickers": "USDT-RUB"}); err != nil {
 		t.Fatal(err)
 	}
-	if gotPath != "/api/get-hloc" || gotContentType != "application/x-www-form-urlencoded" {
-		t.Fatalf("path=%q content-type=%q", gotPath, gotContentType)
+	mac := hmac.New(sha256.New, []byte("secret"))
+	mac.Write([]byte(`{"tickers":"USDT-RUB"}123456`))
+	if gotSignature != hex.EncodeToString(mac.Sum(nil)) {
+		t.Fatalf("signature mismatch")
 	}
-	if gotForm.Get("id") != "USDT-RUB" || gotForm.Get("timeframe") != "60" {
-		t.Fatalf("form=%v", gotForm)
+	if gotBody != `{"tickers":"USDT-RUB"}` || gotPath != "/api/getStockQuotesJson" || gotContentType != "application/json" {
+		t.Fatalf("body=%q path=%q content-type=%q", gotBody, gotPath, gotContentType)
+	}
+	if gotPublicKey != "public" || gotTimestamp != "123456" {
+		t.Fatalf("public-key=%q timestamp=%q", gotPublicKey, gotTimestamp)
 	}
 }
 
@@ -81,7 +61,7 @@ func TestCloudflareErrorIsSanitized(t *testing.T) {
 		}, nil
 	})}
 	c := New("https://example.invalid/api", "public", "secret", httpClient)
-	_, err := c.public(t.Context(), "get-hloc", nil)
+	_, err := c.signed(t.Context(), "getHloc", nil)
 	if err == nil || err.Error() != "HTTP 403 (Cloudflare block)" {
 		t.Fatalf("err=%v", err)
 	}
@@ -96,7 +76,7 @@ func TestAPIErrorIsReported(t *testing.T) {
 		}, nil
 	})}
 	c := New("https://example.invalid/api", "public", "secret", httpClient)
-	_, err := c.public(t.Context(), "get-hloc", nil)
+	_, err := c.signed(t.Context(), "getHloc", nil)
 	if err == nil || err.Error() != "API code 4: Bad signature" {
 		t.Fatalf("err=%v", err)
 	}

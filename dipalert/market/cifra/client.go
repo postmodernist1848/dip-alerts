@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -32,7 +31,7 @@ func New(baseURL, key, secret string, httpClient *http.Client) *Client {
 }
 
 func (c *Client) Snapshot(ctx context.Context, since, now time.Time) (market.Snapshot, error) {
-	quoteRaw, err := c.signed(ctx, "getStockQuotesJson", url.Values{"tickers[0]": {c.Ticker}})
+	quoteRaw, err := c.signed(ctx, "getStockQuotesJson", map[string]any{"tickers": c.Ticker})
 	if err != nil {
 		return market.Snapshot{}, fmt.Errorf("Cifra quote: %w", err)
 	}
@@ -40,13 +39,12 @@ func (c *Client) Snapshot(ctx context.Context, since, now time.Time) (market.Sna
 	if err != nil {
 		return market.Snapshot{}, fmt.Errorf("Cifra quote: %w", err)
 	}
-	candleRaw, err := c.public(ctx, "get-hloc", url.Values{
-		"id":           {c.Ticker},
-		"count":        {"-1"},
-		"timeframe":    {"60"},
-		"intervalMode": {"ClosedRay"},
-		"date_from":    {since.UTC().Format("02.01.2006 15:04")},
-		"date_to":      {now.UTC().Format("02.01.2006 15:04")},
+	candleRaw, err := c.signed(ctx, "getHloc", map[string]any{
+		"id":        c.Ticker,
+		"count":     -1,
+		"timeStart": since.Unix(),
+		"timeEnd":   now.Unix(),
+		"timeframe": 3600,
 	})
 	if err != nil {
 		return market.Snapshot{}, fmt.Errorf("Cifra candles: %w", err)
@@ -58,26 +56,22 @@ func (c *Client) Snapshot(ctx context.Context, since, now time.Time) (market.Sna
 	return market.Snapshot{Market: c.Ticker, Source: "Cifra Markets", Currency: "RUB", BestAsk: ask, QuoteTime: quoteTime, Candles: candles}, nil
 }
 
-func (c *Client) public(ctx context.Context, path string, values url.Values) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/"+path, strings.NewReader(values.Encode()))
+func (c *Client) signed(ctx context.Context, command string, values map[string]any) ([]byte, error) {
+	body, err := json.Marshal(values)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return c.do(req)
-}
-
-func (c *Client) signed(ctx context.Context, command string, values url.Values) ([]byte, error) {
-	values.Set("cmd", command)
-	values.Set("apiKey", c.APIKey)
-	values.Set("nonce", strconv.FormatInt(c.Now().UnixMilli()*10, 10))
+	timestamp := strconv.FormatInt(c.Now().Unix(), 10)
 	mac := hmac.New(sha256.New, []byte(c.APISecret))
-	mac.Write([]byte(values.Encode()))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/v2/cmd/"+command, strings.NewReader(values.Encode()))
+	mac.Write(body)
+	mac.Write([]byte(timestamp))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/"+command, strings.NewReader(string(body)))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-NtApi-PublicKey", c.APIKey)
+	req.Header.Set("X-NtApi-Timestamp", timestamp)
 	req.Header.Set("X-NtApi-Sig", hex.EncodeToString(mac.Sum(nil)))
 	return c.do(req)
 }
