@@ -3,6 +3,9 @@
   "functions": {
     "api/check.go": {
       "maxDuration": 60
+    },
+    "api/status/index.go": {
+      "maxDuration": 60
     }
   }
 }

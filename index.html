@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dip alerts</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; background:#0b0d12; color:#edf1f7 }
+    body { max-width:900px; margin:0 auto; padding:48px 20px }
+    header { display:flex; gap:16px; align-items:end; justify-content:space-between; margin-bottom:28px }
+    h1 { margin:0; font-size:clamp(28px,5vw,44px) } small,.muted { color:#929baa }
+    button { border:0; border-radius:10px; padding:10px 15px; background:#edf1f7; color:#11151c; font-weight:700; cursor:pointer }
+    button:disabled { opacity:.5; cursor:wait }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px }
+    article { padding:22px; border:1px solid #252b36; border-radius:16px; background:#12161e }
+    .top { display:flex; justify-content:space-between; gap:16px; align-items:center }
+    .value { font-size:42px; font-weight:750; letter-spacing:-1px; margin:20px 0 6px }
+    .bar { height:8px; background:#272e3a; border-radius:99px; overflow:hidden; margin:18px 0 }
+    .fill { height:100%; background:#4ed6a5; width:0; border-radius:99px; transition:width .3s }
+    .targets { display:flex; gap:8px; flex-wrap:wrap }
+    .target { padding:6px 9px; border-radius:8px; background:#202632; color:#c7ced9 }
+    .error { color:#ff8b8b; overflow-wrap:anywhere }
+    footer { margin-top:24px; font-size:13px; color:#727c8d }
+  </style>
+</head>
+<body>
+  <header><div><h1>Dip alerts</h1><small id="stamp">Loading live market data…</small></div><button id="refresh">Refresh</button></header>
+  <main class="grid" id="cards"></main>
+  <footer>Read-only view. Refreshing reads Cifra Markets and Hyperliquid; it does not send alerts or write state.</footer>
+  <script>
+    const markets = {
+      'usdt-rub': { title:'USDT / RUB', source:'Cifra Markets · USDT-RUB.IMEX', targets:[-3,-5], window:'14-day high' },
+      'btc-usdc': { title:'BTC / USDC', source:'Hyperliquid spot', targets:[-5,-10], window:'7-day high' }
+    };
+    const cards = document.querySelector('#cards'), stamp = document.querySelector('#stamp'), button = document.querySelector('#refresh');
+    const pct = value => `${(value * 100).toFixed(2)}%`;
+    const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function card(result) {
+      const m = markets[result.market] || {title:result.market,source:'',targets:[],window:''};
+      if (result.error) return `<article><div class="top"><div><strong>${esc(m.title)}</strong><div class="muted">${esc(m.source)}</div></div></div><p class="error">${esc(result.error)}</p><div class="targets">${m.targets.map(x=>`<span class="target">Target ${x}%</span>`).join('')}</div></article>`;
+      const dd = result.drawdown * 100;
+      const next = m.targets.find(x => dd > x);
+      const progress = next === undefined ? 100 : Math.min(100, Math.abs(dd / next) * 100);
+      const distance = next === undefined ? 'All targets crossed' : `${Math.abs(dd-next).toFixed(2)} pp to ${next}%`;
+      return `<article><div class="top"><div><strong>${esc(m.title)}</strong><div class="muted">${esc(m.source)}</div></div><span class="muted">from ${esc(m.window)}</span></div><div class="value">${pct(result.drawdown)}</div><div class="muted">${distance}</div><div class="bar"><div class="fill" style="width:${progress}%"></div></div><div class="targets">${m.targets.map(x=>`<span class="target">Target ${x}%</span>`).join('')}</div></article>`;
+    }
+    async function load() {
+      button.disabled = true; stamp.textContent = 'Loading live market data…';
+      try {
+        const response = await fetch('/api/status', {cache:'no-store'});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        cards.innerHTML = data.results.map(card).join('');
+        stamp.textContent = `Checked ${new Date(data.checkedAt).toLocaleString()} · ${data.ok ? 'all sources healthy' : 'some sources unavailable'}`;
+      } catch (error) { cards.innerHTML = `<article><p class="error">Could not load status: ${esc(error.message)}</p></article>`; stamp.textContent = 'Status unavailable'; }
+      finally { button.disabled = false; }
+    }
+    button.addEventListener('click', load); load();
+  </script>
+</body>
+</html>
