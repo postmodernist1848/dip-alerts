@@ -28,6 +28,8 @@ This calls both data providers and prints calculations. It does not access Redis
 
 The endpoint returns HTTP 200 after an authenticated run even if one provider fails, reports that provider as an error in the JSON response, and still processes the healthy provider. There are no alternate data sources and no trading endpoints.
 
+Transient provider errors are recorded but do not trigger Telegram messages. A failure alert is sent after 12 consecutive failed checks (about one hour with the recommended five-minute schedule), followed by a recovery alert once the provider succeeds again.
+
 ## Development
 
 ```bash

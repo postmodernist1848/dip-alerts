@@ -79,14 +79,20 @@ func TestDirectJumpCombinesTiers(t *testing.T) {
 	}
 }
 
-func TestFailureAlertSentOnceAndRecovery(t *testing.T) {
+func TestFailureAlertAfterTwelveRunsAndRecovery(t *testing.T) {
 	now := time.Date(2026, 9, 7, 9, 0, 0, 0, time.UTC)
 	provider := &fakeProvider{err: errors.New("offline"), now: now}
 	sender := &fakeSender{}
 	engine := &Engine{Store: state.NewMemory(), Sender: sender, Now: func() time.Time { return now }, Watches: []Watch{{ID: "btc", Provider: provider, Lookback: time.Hour, Tiers: []Tier{{Name: "-5", Drawdown: -.05}}, Schedule: BTCSchedule}}}
+	for range failureAlertThreshold - 1 {
+		_, _ = engine.Run(context.Background(), true)
+	}
+	if len(sender.messages) != 0 {
+		t.Fatalf("early failure messages=%v", sender.messages)
+	}
 	_, _ = engine.Run(context.Background(), true)
 	_, _ = engine.Run(context.Background(), true)
-	if len(sender.messages) != 1 || !strings.Contains(sender.messages[0], "failed") {
+	if len(sender.messages) != 1 || !strings.Contains(sender.messages[0], "12 consecutive checks") {
 		t.Fatalf("failure messages=%v", sender.messages)
 	}
 	provider.err = nil
@@ -96,6 +102,40 @@ func TestFailureAlertSentOnceAndRecovery(t *testing.T) {
 	}
 	if len(sender.messages) != 2 || !strings.Contains(sender.messages[1], "recovered") {
 		t.Fatalf("recovery messages=%v", sender.messages)
+	}
+}
+
+func TestShortFailureDoesNotSendRecovery(t *testing.T) {
+	now := time.Date(2026, 9, 7, 9, 0, 0, 0, time.UTC)
+	provider := &fakeProvider{err: errors.New("offline"), now: now}
+	sender := &fakeSender{}
+	engine := &Engine{Store: state.NewMemory(), Sender: sender, Now: func() time.Time { return now }, Watches: []Watch{{ID: "btc", Provider: provider, Lookback: time.Hour, Schedule: BTCSchedule}}}
+	for range failureAlertThreshold - 1 {
+		_, _ = engine.Run(context.Background(), true)
+	}
+	provider.err = nil
+	provider.ask = 100
+	if _, err := engine.Run(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if len(sender.messages) != 0 {
+		t.Fatalf("messages=%v", sender.messages)
+	}
+}
+
+func TestReadOnlyFailureDoesNotChangeState(t *testing.T) {
+	now := time.Date(2026, 9, 7, 9, 0, 0, 0, time.UTC)
+	store := state.NewMemory()
+	engine := &Engine{Store: store, Sender: &fakeSender{}, Now: func() time.Time { return now }, Watches: []Watch{{ID: "btc", Provider: &fakeProvider{err: errors.New("offline")}, Lookback: time.Hour, Schedule: BTCSchedule}}}
+	for range failureAlertThreshold {
+		_, _ = engine.Run(context.Background(), false)
+	}
+	stored, err := store.Load(context.Background(), "btc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.ConsecutiveFailures != 0 || stored.Failed {
+		t.Fatalf("read-only run changed state: %+v", stored)
 	}
 }
 

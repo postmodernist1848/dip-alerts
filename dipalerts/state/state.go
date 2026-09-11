@@ -3,9 +3,10 @@ package state
 import "context"
 
 type MarketState struct {
-	Cycle  string          `json:"cycle"`
-	Armed  map[string]bool `json:"armed"`
-	Failed bool            `json:"failed"`
+	Cycle               string          `json:"cycle"`
+	Armed               map[string]bool `json:"armed"`
+	Failed              bool            `json:"failed"`
+	ConsecutiveFailures int             `json:"consecutiveFailures,omitempty"`
 }
 
 type Store interface {

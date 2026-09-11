@@ -41,6 +41,8 @@ type Engine struct {
 	Now     func() time.Time
 }
 
+const failureAlertThreshold = 12
+
 func (e *Engine) Run(ctx context.Context, deliver bool) ([]Result, error) {
 	now := time.Now().UTC()
 	if e.Now != nil {
@@ -67,27 +69,15 @@ func (e *Engine) runWatch(ctx context.Context, watch Watch, now time.Time, deliv
 	}
 	snapshot, err := watch.Provider.Snapshot(ctx, now.Add(-watch.Lookback), now)
 	if err != nil {
-		result.Error = err.Error()
-		if deliver && !stored.Failed {
-			_ = e.Sender.Send(ctx, "⚠️ "+watch.ID+" data API failed; buying alerts are skipped.\n"+err.Error())
-		}
-		stored.Failed = true
-		_ = e.Store.Save(ctx, watch.ID, stored)
-		return result, err
+		return e.recordFailure(ctx, watch.ID, result, stored, err, deliver)
 	}
 	if snapshot.QuoteTime.IsZero() || now.Sub(snapshot.QuoteTime) > 15*time.Minute || snapshot.QuoteTime.After(now.Add(time.Minute)) {
 		err = fmt.Errorf("%s quote is stale (%s)", snapshot.Source, snapshot.QuoteTime.Format(time.RFC3339))
-		result.Error = err.Error()
-		stored.Failed = true
-		_ = e.Store.Save(ctx, watch.ID, stored)
-		return result, err
+		return e.recordFailure(ctx, watch.ID, result, stored, err, deliver)
 	}
 	high, highAt, err := market.RollingHigh(snapshot, now.Add(-watch.Lookback), now)
 	if err != nil {
-		result.Error = err.Error()
-		stored.Failed = true
-		_ = e.Store.Save(ctx, watch.ID, stored)
-		return result, err
+		return e.recordFailure(ctx, watch.ID, result, stored, err, deliver)
 	}
 	drawdown := snapshot.BestAsk/high - 1
 	result.CurrentPrice = snapshot.BestAsk
@@ -110,6 +100,7 @@ func (e *Engine) runWatch(ctx context.Context, watch Watch, now time.Time, deliv
 		_ = e.Sender.Send(ctx, "✅ "+watch.ID+" data API recovered.")
 	}
 	stored.Failed = false
+	stored.ConsecutiveFailures = 0
 	var crossed []Tier
 	for _, tier := range watch.Tiers {
 		if stored.Armed[tier.Name] && drawdown <= tier.Drawdown {
@@ -138,6 +129,20 @@ func (e *Engine) runWatch(ctx context.Context, watch Watch, now time.Time, deliv
 		}
 	}
 	return result, nil
+}
+
+func (e *Engine) recordFailure(ctx context.Context, marketID string, result Result, stored state.MarketState, failure error, deliver bool) (Result, error) {
+	result.Error = failure.Error()
+	if !deliver {
+		return result, failure
+	}
+	stored.ConsecutiveFailures++
+	if stored.ConsecutiveFailures >= failureAlertThreshold && !stored.Failed {
+		_ = e.Sender.Send(ctx, fmt.Sprintf("⚠️ %s data API failed for %d consecutive checks; buying alerts are skipped.\n%s", marketID, stored.ConsecutiveFailures, failure))
+		stored.Failed = true
+	}
+	_ = e.Store.Save(ctx, marketID, stored)
+	return result, failure
 }
 
 func formatAlert(snapshot market.Snapshot, high float64, highAt time.Time, drawdown float64, crossed []Tier, next time.Time) string {
