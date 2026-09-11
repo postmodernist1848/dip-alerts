@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/postmodernist1848/dip-alerts/dipalert/market"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/market"
 )
 
 const defaultURL = "https://api.hyperliquid.xyz/info"

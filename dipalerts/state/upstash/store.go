@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/postmodernist1848/dip-alerts/dipalert/state"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/state"
 )
 
 type Store struct {
@@ -61,12 +61,12 @@ func (s *Store) SaveLastCheck(ctx context.Context, value any) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.command(ctx, "SET", "dip-alert:v1:last-check", string(raw))
+	_, err = s.command(ctx, "SET", "dip-alerts:v1:last-check", string(raw))
 	return err
 }
 
 func (s *Store) LoadLastCheck(ctx context.Context) (json.RawMessage, error) {
-	result, err := s.command(ctx, "GET", "dip-alert:v1:last-check")
+	result, err := s.command(ctx, "GET", "dip-alerts:v1:last-check")
 	if err != nil {
 		return nil, err
 	}
@@ -116,4 +116,4 @@ func (s *Store) command(ctx context.Context, args ...string) (json.RawMessage, e
 	return envelope.Result, nil
 }
 
-func key(marketName string) string { return "dip-alert:v1:market:" + marketName }
+func key(marketName string) string { return "dip-alerts:v1:market:" + marketName }

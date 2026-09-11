@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/postmodernist1848/dip-alerts/dipalert/alert"
-	"github.com/postmodernist1848/dip-alerts/dipalert/config"
-	"github.com/postmodernist1848/dip-alerts/dipalert/market/cifra"
-	"github.com/postmodernist1848/dip-alerts/dipalert/market/hyperliquid"
-	"github.com/postmodernist1848/dip-alerts/dipalert/state"
-	"github.com/postmodernist1848/dip-alerts/dipalert/telegram"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/alert"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/config"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/market/cifra"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/market/hyperliquid"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/state"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/telegram"
 )
 
 func Engine(c config.Config, store state.Store, sender telegram.Sender, client *http.Client) *alert.Engine {

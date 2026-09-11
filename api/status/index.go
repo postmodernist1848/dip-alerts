@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/postmodernist1848/dip-alerts/dipalert/app"
-	"github.com/postmodernist1848/dip-alerts/dipalert/config"
-	"github.com/postmodernist1848/dip-alerts/dipalert/state"
-	"github.com/postmodernist1848/dip-alerts/dipalert/state/upstash"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/app"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/config"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/state"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/state/upstash"
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {

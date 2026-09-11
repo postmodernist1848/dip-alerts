@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/postmodernist1848/dip-alerts/dipalert/market"
-	"github.com/postmodernist1848/dip-alerts/dipalert/state"
-	"github.com/postmodernist1848/dip-alerts/dipalert/telegram"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/market"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/state"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/telegram"
 )
 
 type Tier struct {

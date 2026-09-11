@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/postmodernist1848/dip-alerts/dipalert/market"
-	"github.com/postmodernist1848/dip-alerts/dipalert/state"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/market"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/state"
 )
 
 type fakeProvider struct {
