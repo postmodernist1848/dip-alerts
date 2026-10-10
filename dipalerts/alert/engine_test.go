@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/postmodernist1848/dip-alerts/dipalerts/market"
+	"github.com/postmodernist1848/dip-alerts/dipalerts/market/cifra"
 	"github.com/postmodernist1848/dip-alerts/dipalerts/state"
 )
 
@@ -148,5 +149,123 @@ func TestSchedules(t *testing.T) {
 	cycle, next = BTCSchedule(time.Date(2026, 9, 9, 12, 0, 0, 0, moscow))
 	if cycle != "2026-09-06" || next.Day() != 13 {
 		t.Fatalf("btc cycle=%s next=%s", cycle, next)
+	}
+}
+
+func TestCifraOvernightStalenessAndRecovery(t *testing.T) {
+	for _, outlastsWindow := range []bool{false, true} {
+		name := "recovers during quiet period"
+		if outlastsWindow {
+			name = "outage continues after cutoff"
+		}
+		t.Run(name, func(t *testing.T) {
+			now := time.Date(2026, 10, 5, 23, 15, 0, 0, time.UTC)
+			provider := &fakeProvider{ask: 90, now: time.Date(2026, 10, 5, 22, 53, 54, 0, time.UTC)}
+			sender := &fakeSender{}
+			store := state.NewMemory()
+			engine := &Engine{Store: store, Sender: sender, Now: func() time.Time { return now }, Watches: []Watch{{
+				ID: "usdt-rub", Provider: provider, Lookback: 14 * 24 * time.Hour,
+				Tiers: []Tier{{Name: "-3", Drawdown: -.03}}, Schedule: RUBSchedule,
+				SuppressStaleAlert: cifra.SuppressOvernightStaleAlert,
+			}}}
+			const quietChecks = 15
+			for range quietChecks {
+				results, err := engine.Run(t.Context(), true)
+				if err == nil || results[0].Error == "" || !results[0].FailureAlertSuppressed || len(results[0].Alerted) != 0 {
+					t.Fatalf("stale quote was not visibly skipped: results=%+v err=%v", results, err)
+				}
+				now = now.Add(5 * time.Minute)
+			}
+			if len(sender.messages) != 0 {
+				t.Fatalf("quiet period sent notifications: %v", sender.messages)
+			}
+			stored, _ := store.Load(t.Context(), "usdt-rub")
+			if stored.Failed || stored.ConsecutiveFailures != quietChecks || stored.Cycle != "" || len(stored.Armed) != 0 {
+				t.Fatalf("quiet failures changed alert state: %+v", stored)
+			}
+			if outlastsWindow {
+				now = time.Date(2026, 10, 6, 1, 0, 0, 0, time.UTC)
+				results, err := engine.Run(t.Context(), true)
+				if err == nil || results[0].FailureAlertSuppressed || len(sender.messages) != 1 || !strings.Contains(sender.messages[0], "data API failed") {
+					t.Fatalf("continuing outage was not alerted: results=%+v err=%v messages=%v", results, err, sender.messages)
+				}
+				_, _ = engine.Run(t.Context(), true)
+				if len(sender.messages) != 1 {
+					t.Fatalf("duplicate outage notification: %v", sender.messages)
+				}
+			}
+			provider.now, provider.ask = now, 100
+			if _, err := engine.Run(t.Context(), true); err != nil {
+				t.Fatal(err)
+			}
+			wantMessages := 0
+			if outlastsWindow {
+				wantMessages = 2
+			}
+			if len(sender.messages) != wantMessages {
+				t.Fatalf("recovery notifications: %v", sender.messages)
+			}
+			if outlastsWindow && !strings.Contains(sender.messages[1], "recovered") {
+				t.Fatalf("missing recovery: %v", sender.messages)
+			}
+			stored, _ = store.Load(t.Context(), "usdt-rub")
+			if stored.Failed || stored.ConsecutiveFailures != 0 {
+				t.Fatalf("recovery did not reset failure state: %+v", stored)
+			}
+		})
+	}
+}
+
+func TestCifraQuietPeriodKeepsOtherFailuresAlertable(t *testing.T) {
+	now := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+	nightlyQuote := time.Date(2026, 10, 5, 22, 53, 54, 0, time.UTC)
+	tests := []struct {
+		name, marketID string
+		quote          time.Time
+		failure        error
+	}{
+		{"network or API error", "usdt-rub", nightlyQuote, errors.New("offline")},
+		{"missing timestamp", "usdt-rub", time.Time{}, nil},
+		{"future timestamp", "usdt-rub", now.Add(2 * time.Minute), nil},
+		{"quote outside pattern", "usdt-rub", now.Add(-6 * time.Hour), nil},
+		{"quote from previous night", "usdt-rub", nightlyQuote.Add(-24 * time.Hour), nil},
+		{"another provider", "btc-usdc", nightlyQuote, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sender := &fakeSender{}
+			watch := Watch{ID: tt.marketID, Provider: &fakeProvider{ask: 100, now: tt.quote, err: tt.failure}, Lookback: 14 * 24 * time.Hour, Schedule: RUBSchedule}
+			if tt.marketID == "usdt-rub" {
+				watch.SuppressStaleAlert = cifra.SuppressOvernightStaleAlert
+			}
+			engine := &Engine{Store: state.NewMemory(), Sender: sender, Now: func() time.Time { return now }, Watches: []Watch{watch}}
+			for range failureAlertThreshold {
+				results, err := engine.Run(t.Context(), true)
+				if err == nil || results[0].FailureAlertSuppressed {
+					t.Fatalf("unexpected suppression: results=%+v err=%v", results, err)
+				}
+			}
+			if len(sender.messages) != 1 || !strings.Contains(sender.messages[0], "12 consecutive checks") {
+				t.Fatalf("failure notifications: %v", sender.messages)
+			}
+		})
+	}
+}
+
+func TestReadOnlyQuietPeriodDoesNotChangeState(t *testing.T) {
+	now := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+	store := state.NewMemory()
+	sender := &fakeSender{}
+	engine := &Engine{Store: store, Sender: sender, Now: func() time.Time { return now }, Watches: []Watch{{
+		ID: "usdt-rub", Provider: &fakeProvider{ask: 90, now: time.Date(2026, 10, 5, 22, 53, 54, 0, time.UTC)},
+		Lookback: 14 * 24 * time.Hour, Schedule: RUBSchedule, SuppressStaleAlert: cifra.SuppressOvernightStaleAlert,
+	}}}
+	results, err := engine.Run(t.Context(), false)
+	if err == nil || !results[0].FailureAlertSuppressed {
+		t.Fatalf("read-only result=%+v err=%v", results, err)
+	}
+	stored, _ := store.Load(t.Context(), "usdt-rub")
+	if stored.ConsecutiveFailures != 0 || stored.Failed || len(sender.messages) != 0 {
+		t.Fatalf("read-only run changed state: state=%+v messages=%v", stored, sender.messages)
 	}
 }

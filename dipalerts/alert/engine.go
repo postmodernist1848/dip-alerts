@@ -24,15 +24,18 @@ type Watch struct {
 	Lookback time.Duration
 	Tiers    []Tier
 	Schedule Schedule
+	// SuppressStaleAlert only defers notifications; stale quotes still skip buying alerts.
+	SuppressStaleAlert func(quoteTime, now time.Time) bool
 }
 type Result struct {
-	Market       string     `json:"market"`
-	CurrentPrice float64    `json:"currentPrice,omitempty"`
-	RollingHigh  float64    `json:"rollingHigh,omitempty"`
-	HighAt       *time.Time `json:"highAt,omitempty"`
-	Drawdown     float64    `json:"drawdown,omitempty"`
-	Alerted      []string   `json:"alerted,omitempty"`
-	Error        string     `json:"error,omitempty"`
+	Market                 string     `json:"market"`
+	CurrentPrice           float64    `json:"currentPrice,omitempty"`
+	RollingHigh            float64    `json:"rollingHigh,omitempty"`
+	HighAt                 *time.Time `json:"highAt,omitempty"`
+	Drawdown               float64    `json:"drawdown,omitempty"`
+	Alerted                []string   `json:"alerted,omitempty"`
+	Error                  string     `json:"error,omitempty"`
+	FailureAlertSuppressed bool       `json:"failureAlertSuppressed,omitempty"`
 }
 type Engine struct {
 	Store   state.Store
@@ -73,6 +76,9 @@ func (e *Engine) runWatch(ctx context.Context, watch Watch, now time.Time, deliv
 	}
 	if snapshot.QuoteTime.IsZero() || now.Sub(snapshot.QuoteTime) > 15*time.Minute || snapshot.QuoteTime.After(now.Add(time.Minute)) {
 		err = fmt.Errorf("%s quote is stale (%s)", snapshot.Source, snapshot.QuoteTime.Format(time.RFC3339))
+		if watch.SuppressStaleAlert != nil {
+			result.FailureAlertSuppressed = watch.SuppressStaleAlert(snapshot.QuoteTime, now)
+		}
 		return e.recordFailure(ctx, watch.ID, result, stored, err, deliver)
 	}
 	high, highAt, err := market.RollingHigh(snapshot, now.Add(-watch.Lookback), now)
@@ -137,7 +143,7 @@ func (e *Engine) recordFailure(ctx context.Context, marketID string, result Resu
 		return result, failure
 	}
 	stored.ConsecutiveFailures++
-	if stored.ConsecutiveFailures >= failureAlertThreshold && !stored.Failed {
+	if stored.ConsecutiveFailures >= failureAlertThreshold && !stored.Failed && !result.FailureAlertSuppressed {
 		_ = e.Sender.Send(ctx, fmt.Sprintf("⚠️ %s data API failed for %d consecutive checks; buying alerts are skipped.\n%s", marketID, stored.ConsecutiveFailures, failure))
 		stored.Failed = true
 	}
