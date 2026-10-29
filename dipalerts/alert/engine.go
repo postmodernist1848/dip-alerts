@@ -24,7 +24,7 @@ type Watch struct {
 	Lookback time.Duration
 	Tiers    []Tier
 	Schedule Schedule
-	// SuppressStaleAlert only defers notifications; stale quotes still skip buying alerts.
+	// SuppressStaleAlert defers data failure notifications during allowed downtime.
 	SuppressStaleAlert func(quoteTime, now time.Time) bool
 }
 type Result struct {
@@ -69,6 +69,9 @@ func (e *Engine) runWatch(ctx context.Context, watch Watch, now time.Time, deliv
 	if err != nil {
 		result.Error = err.Error()
 		return result, err
+	}
+	if watch.SuppressStaleAlert != nil {
+		result.FailureAlertSuppressed = watch.SuppressStaleAlert(time.Time{}, now)
 	}
 	snapshot, err := watch.Provider.Snapshot(ctx, now.Add(-watch.Lookback), now)
 	if err != nil {
@@ -142,7 +145,11 @@ func (e *Engine) recordFailure(ctx context.Context, marketID string, result Resu
 	if !deliver {
 		return result, failure
 	}
-	stored.ConsecutiveFailures++
+	if result.FailureAlertSuppressed {
+		stored.ConsecutiveFailures = 0
+	} else {
+		stored.ConsecutiveFailures++
+	}
 	if stored.ConsecutiveFailures >= failureAlertThreshold && !stored.Failed && !result.FailureAlertSuppressed {
 		_ = e.Sender.Send(ctx, fmt.Sprintf("⚠️ %s data API failed for %d consecutive checks; buying alerts are skipped.\n%s", marketID, stored.ConsecutiveFailures, failure))
 		stored.Failed = true

@@ -30,7 +30,7 @@ The endpoint returns HTTP 200 after an authenticated run even if one provider fa
 
 Transient provider errors are recorded but do not trigger Telegram messages. A failure alert is sent after 12 consecutive failed checks (about one hour with the recommended five-minute schedule), followed by a recovery alert once the provider succeeds again.
 
-For Cifra USDT/RUB only, a stale quote last updated from 01:45 (inclusive) to 02:00 (exclusive) Moscow time suppresses outage notifications until 04:00 that same morning. This bounded rule matches an observed recurring pause; it is not a confirmed exchange maintenance schedule. Buying alerts remain skipped, the API result still includes the stale-quote error and `failureAlertSuppressed: true`, and failed checks continue to accumulate. If the quote stays stale beyond 04:00, the next check sends the usual warning once the 12-check threshold has been met. A recovery message is sent only if an outage warning was sent. Other provider errors, other quote times, previous-day frozen quotes, and Hyperliquid retain the normal failure policy.
+For Cifra USDT/RUB only, data failure notifications are suppressed daily from 01:50 (inclusive) to 05:10 (exclusive) Moscow time, based on check time regardless of quote timestamp or error type. Buying alerts remain skipped when data is unavailable; the API result still includes the error and `failureAlertSuppressed: true`, and the consecutive failure counter is reset rather than incremented. If the outage continues beyond 05:10, the next check sends the usual warning after 12 failed checks outside the allowed window. A recovery message is sent only if an outage warning was sent. Hyperliquid retains the normal failure policy.
 
 ## Development
 

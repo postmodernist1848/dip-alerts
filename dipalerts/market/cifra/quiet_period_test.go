@@ -10,21 +10,12 @@ func TestOvernightStaleAlertWindow(t *testing.T) {
 		name, quote, checked string
 		want                 bool
 	}{
-		{"reported October 5 pause", "2026-10-05T22:53:54Z", "2026-10-06T00:15:00Z", true},
-		{"reported October 6 pause", "2026-10-06T22:46:57Z", "2026-10-07T00:15:00Z", true},
-		{"reported October 7 pause", "2026-10-07T22:55:05Z", "2026-10-08T00:15:00Z", true},
-		{"quote at window start", "2026-10-05T22:45:00Z", "2026-10-06T00:00:00Z", true},
-		{"just before cutoff", "2026-10-05T22:53:54Z", "2026-10-06T00:59:59Z", true},
-		{"at cutoff", "2026-10-05T22:53:54Z", "2026-10-06T01:00:00Z", false},
-		{"daytime", "2026-10-05T22:53:54Z", "2026-10-06T09:00:00Z", false},
-		{"previous night must not repeat", "2026-10-05T22:53:54Z", "2026-10-07T00:00:00Z", false},
-		{"quote before window", "2026-10-05T22:44:59Z", "2026-10-06T00:00:00Z", false},
-		{"quote at window end", "2026-10-05T23:00:00Z", "2026-10-06T00:00:00Z", false},
-		{"daytime quote at night", "2026-10-05T18:00:00Z", "2026-10-06T00:00:00Z", false},
-		{"future quote", "2026-10-05T22:53:54Z", "2026-10-05T22:45:00Z", false},
-		{"missing quote timestamp", "0001-01-01T00:00:00Z", "2026-10-06T00:00:00Z", false},
-		{"Moscow offset", "2026-10-06T01:53:54+03:00", "2026-10-06T03:00:00+03:00", true},
-		{"year rollover", "2026-12-31T22:53:54Z", "2027-01-01T00:15:00Z", true},
+		{"before start", "0001-01-01T00:00:00Z", "2026-10-06T01:49:59+03:00", false},
+		{"at start", "0001-01-01T00:00:00Z", "2026-10-06T01:50:00+03:00", true},
+		{"before end", "2026-10-01T00:00:00Z", "2026-10-06T05:09:59+03:00", true},
+		{"at end", "2026-10-01T00:00:00Z", "2026-10-06T05:10:00+03:00", false},
+		{"UTC across midnight", "0001-01-01T00:00:00Z", "2026-10-05T23:00:00Z", true},
+		{"daytime", "0001-01-01T00:00:00Z", "2026-10-06T12:00:00+03:00", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

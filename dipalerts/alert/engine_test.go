@@ -180,11 +180,17 @@ func TestCifraOvernightStalenessAndRecovery(t *testing.T) {
 				t.Fatalf("quiet period sent notifications: %v", sender.messages)
 			}
 			stored, _ := store.Load(t.Context(), "usdt-rub")
-			if stored.Failed || stored.ConsecutiveFailures != quietChecks || stored.Cycle != "" || len(stored.Armed) != 0 {
+			if stored.Failed || stored.ConsecutiveFailures != 0 || stored.Cycle != "" || len(stored.Armed) != 0 {
 				t.Fatalf("quiet failures changed alert state: %+v", stored)
 			}
 			if outlastsWindow {
-				now = time.Date(2026, 10, 6, 1, 0, 0, 0, time.UTC)
+				now = time.Date(2026, 10, 6, 2, 10, 0, 0, time.UTC)
+				for range failureAlertThreshold - 1 {
+					_, _ = engine.Run(t.Context(), true)
+				}
+				if len(sender.messages) != 0 {
+					t.Fatalf("alert before 12 checks outside window: %v", sender.messages)
+				}
 				results, err := engine.Run(t.Context(), true)
 				if err == nil || results[0].FailureAlertSuppressed || len(sender.messages) != 1 || !strings.Contains(sender.messages[0], "data API failed") {
 					t.Fatalf("continuing outage was not alerted: results=%+v err=%v messages=%v", results, err, sender.messages)
@@ -216,7 +222,7 @@ func TestCifraOvernightStalenessAndRecovery(t *testing.T) {
 	}
 }
 
-func TestCifraQuietPeriodKeepsOtherFailuresAlertable(t *testing.T) {
+func TestCifraQuietPeriodSuppressesAllDataFailures(t *testing.T) {
 	now := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
 	nightlyQuote := time.Date(2026, 10, 5, 22, 53, 54, 0, time.UTC)
 	tests := []struct {
@@ -241,11 +247,11 @@ func TestCifraQuietPeriodKeepsOtherFailuresAlertable(t *testing.T) {
 			engine := &Engine{Store: state.NewMemory(), Sender: sender, Now: func() time.Time { return now }, Watches: []Watch{watch}}
 			for range failureAlertThreshold {
 				results, err := engine.Run(t.Context(), true)
-				if err == nil || results[0].FailureAlertSuppressed {
+				if err == nil || results[0].FailureAlertSuppressed != (tt.marketID == "usdt-rub") {
 					t.Fatalf("unexpected suppression: results=%+v err=%v", results, err)
 				}
 			}
-			if len(sender.messages) != 1 || !strings.Contains(sender.messages[0], "12 consecutive checks") {
+			if (tt.marketID == "usdt-rub" && len(sender.messages) != 0) || (tt.marketID != "usdt-rub" && len(sender.messages) != 1) {
 				t.Fatalf("failure notifications: %v", sender.messages)
 			}
 		})
